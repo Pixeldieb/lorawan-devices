@@ -1,0 +1,88 @@
+function decodeUplink(input) {
+    const bytes = input.bytes;
+
+    // Validate payload
+    if (!bytes || bytes.length === 0) {
+        return { errors: ["Payload is empty"] };
+    }
+
+    try {
+        const data = decodePayload(bytes);
+        return { data };
+    } catch (error) {
+        return { errors: [error.message] };
+    }
+}
+
+function decodePayload(bytes) {
+    const data = {};
+    const messageType = bytes[0];
+
+    switch (messageType) {
+        case 0x01: // Change of mat state
+            decodeMatState(bytes, data);
+            break;
+
+        case 0x02: // Button press
+            decodeButtonPress(bytes, data);
+            break;
+
+        case 0x03: // Heartbeat
+            decodeHeartbeat(bytes, data);
+            break;
+
+        case 0x04: // Automatic self-calibration
+            decodeSelfCalibration(bytes, data);
+            break;
+
+        default: // Unknown message type
+            throw new Error(`Unknown message type: 0x${messageType.toString(16)}`);
+    }
+
+    return data;
+}
+
+/**
+ * Decodes the "Change of mat state" message.
+ */
+function decodeMatState(bytes, data) {
+    validateLength(bytes, 2, "Change of mat state");
+    data.event = "Change of mat state";
+    data.state = bytes[1] === 0x00 ? "Dry to Wet" : "Wet to Dry";
+}
+
+/**
+ * Decodes the "Button press" message.
+ */
+function decodeButtonPress(bytes, data) {
+    validateLength(bytes, 2, "Button press");
+    data.event = "Button press";
+    data.ackReceived = bytes[1] === 0x01;
+}
+
+/**
+ * Decodes the "Heartbeat" message.
+ */
+function decodeHeartbeat(bytes, data) {
+    validateLength(bytes, 2, "Heartbeat");
+    data.event = "Heartbeat";
+    data.interval = bytes[1]; // Interval in minutes
+}
+
+/**
+ * Decodes the "Automatic self-calibration" message.
+ */
+function decodeSelfCalibration(bytes, data) {
+    validateLength(bytes, 2, "Automatic self-calibration");
+    data.event = "Automatic self-calibration";
+    data.retryCount = bytes[1];
+}
+
+/**
+ * Validates the minimum required length of the payload.
+ */
+function validateLength(bytes, minLength, context) {
+    if (bytes.length < minLength) {
+        throw new Error(`Insufficient bytes for ${context}`);
+    }
+}
