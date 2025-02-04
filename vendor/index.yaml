@@ -1695,8 +1695,8 @@ vendors:
 
   - id: acrios
     name: ACRIOS Systems s.r.o.
-    website: https://acrios.com/?lang=en
-    logo: acrioslogo.png
+    website: https://acrios.com/
+    logo: acrios-logo.png
 
   - id: espeasy
     name: ESP Easy
@@ -2069,3 +2069,55 @@ vendors:
     social:
       linkedin: https://www.linkedin.com/company/cicicom-ltd
       facebook: https://www.facebook.com/cicicom
+
+  - id: atomsenses
+    name: Atomsenses
+    description: Atomsenses is a specialist IoT solution provider focusing on Lorawan sensors for indoor air quality monitoring, our vision is to transform how we manage and maintain healthy indoor environments.
+    logo: atomsenses.png
+    website: https://www.atomsenses.com/
+    social:
+      linkedin: https://www.linkedin.com/company/atomsenses-iot
+      github: Atomsenses
+
+  - id: jooby
+    name: Jooby
+    description: Jooby offers smart lighting and automates power, gas, heat, and water readings.
+    vendorID: 670
+    logo: jooby.png
+    website: https://jooby.eu/
+    social:
+      facebook: https://www.facebook.com/jooby.eu
+      github: jooby-dev
+
+  - id: accuwatch
+    name: Accuwatch
+    description: Accuwatch is a company that provides a range of IoT solutions for various industries.
+    logo: accuwatch.png
+    website: https://accuwatch.nl/
+
+  - id: infrafon
+    name: Infrafon
+    description: Infrafon develops iot devices for humans, bridging the gap between handheld computers and lightweight smart cards.
+    logo: infrafon_logo.png
+    website: https://www.infrafon.com/
+    social:
+      linkedin: https://de.linkedin.com/company/infrafon
+
+  - id: makerfabs
+    name: AgroSense
+
+  - id: yobiiq
+    name: YOBIIQ B.V.
+    description: The best way to predict the future is by creating it. As an IoT Solutions Company, we develop smart solutions daily, tailored to your business and objectives. We serve as a full-service provider for Smart Environments and a distributor with in-house product development, offering comprehensive solutions for almost any requirement. Partner with us to drive your smart future forward.
+    logo: yobiiq_logo.svg
+    website: https://www.yobiiq.com
+    vendorID: 1045
+    ouis: ['FC48C9']
+    social:
+      linkedin: https://www.linkedin.com/company/yobiiq
+      facebook: https://www.facebook.com/yobiiq
+      twitter: yobiiq
+      github: Yobiiq-BV
+
+  - id: southerniot
+    name: Southern IoT
