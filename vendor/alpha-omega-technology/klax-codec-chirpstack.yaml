@@ -1,0 +1,67 @@
+function decodeUplink(input) {
+    var bytes = input.bytes;
+    var data = {};
+    
+    // Header-Informationen extrahieren
+    data.header = {
+        batteryPerc: 100,
+        configured: (bytes[0] & 0x01) !== 0,
+        connTest: (bytes[0] & 0x02) !== 0,
+        deviceType: "SML Klax",
+        meterType: "SML",
+        version: bytes[0] >> 2
+    };
+    
+    // Nachrichteninformationen extrahieren
+    data.msgInfo = {
+        msgCnt: bytes[1],
+        msgIdx: bytes[2],
+        msgNum: bytes[3]
+    };
+    
+    data.payloads = [];
+    
+    // Server ID extrahieren
+    var serverID = bytes.slice(4, 14).map(b => b.toString(16).padStart(2, '0')).join('');
+    data.payloads.push({
+        id: serverID,
+        type: "serverID"
+    });
+    
+    // Register-Daten extrahieren
+    function extractRegister(startIndex, filterId) {
+        var valid = bytes[startIndex] !== 0;
+        return {
+            dataValid: valid,
+            data_valid: valid,
+            filterId: filterId,
+            unit: valid ? "Wh" : "NDEF",
+            values: [
+                (bytes[startIndex + 1] << 16) | (bytes[startIndex + 2] << 8) | bytes[startIndex + 3],
+                (bytes[startIndex + 4] << 16) | (bytes[startIndex + 5] << 8) | bytes[startIndex + 6],
+                (bytes[startIndex + 7] << 16) | (bytes[startIndex + 8] << 8) | bytes[startIndex + 9],
+                (bytes[startIndex + 10] << 16) | (bytes[startIndex + 11] << 8) | bytes[startIndex + 12]
+            ]
+        };
+    }
+    
+    data.payloads.push({
+        type: "historic",
+        registers: [
+            extractRegister(14, 0),
+            extractRegister(28, 1)
+        ]
+    });
+    
+    data.payloads.push({
+        type: "historic",
+        registers: [
+            extractRegister(42, 2),
+            extractRegister(56, 3)
+        ]
+    });
+    
+    return {
+        data: data
+    };
+}
