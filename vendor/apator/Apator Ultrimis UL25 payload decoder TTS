@@ -1,0 +1,278 @@
+// this payloaddecoder is absolute AI Slop and might not work
+function decodeUplink(input) {
+    const bytes = input.bytes;
+
+    const FLAGS = [
+        "Tamper",
+        "LowBattery",
+        "Dry",
+        "AbsenceOfFlow",
+        "ExtremeTemperature",
+        "Burst",
+        "ReverseFlow",
+        "Leak"
+    ];
+
+    function readUInt32LE(b, i) {
+        return (
+            (b[i]) |
+            (b[i + 1] << 8) |
+            (b[i + 2] << 16) |
+            (b[i + 3] << 24)
+        ) >>> 0;
+    }
+
+    function readInt32LE(b, i) {
+        return readUInt32LE(b, i) | 0;
+    }
+
+    function readInt16LE(b, i) {
+        let value = b[i] | (b[i + 1] << 8);
+        return value & 0x8000 ? value - 0x10000 : value;
+    }
+
+    function readFlags(value) {
+        const result = [];
+
+        for (let i = 0; i < FLAGS.length; i++) {
+            if (value & (1 << i)) {
+                result.push(FLAGS[i]);
+            }
+        }
+
+        return result.length ? result : ["None"];
+    }
+
+    function readTimestamp(seconds) {
+        return new Date(seconds * 1000).toISOString();
+    }
+
+    // CRC16 according to the original Apator parser
+    function calculateCRC16(data) {
+        let crc = 0x0000;
+        const poly = 0x3D65;
+
+        for (let b of data) {
+            for (let mask = 0x80; mask !== 0; mask >>= 1) {
+                if (crc & 0x8000) {
+                    crc = ((crc << 1) ^ poly) & 0xFFFF;
+                } else {
+                    crc = (crc << 1) & 0xFFFF;
+                }
+
+                if (b & mask) {
+                    crc ^= poly;
+                }
+            }
+        }
+
+        crc ^= 0xFFFF;
+
+        return [
+            (crc >> 8) & 0xFF,
+            crc & 0xFF
+        ];
+    }
+
+    function checkCRC(data) {
+        if (data.length < 3) {
+            return false;
+        }
+
+        const calculated = calculateCRC16(data.slice(0, -2));
+
+        // Apator transmits CRC bytes in reverse order
+        return (
+            calculated[0] === data[data.length - 1] &&
+            calculated[1] === data[data.length - 2]
+        );
+    }
+
+    function getUnit(version) {
+        const scale = (version & 0x18) >> 3;
+
+        const units = [
+            { name: "Liters", liters: 1 },
+            { name: "Decaliters", liters: 10 },
+            { name: "Hectoliters", liters: 100 },
+            { name: "CubicMeters", liters: 1000 }
+        ];
+
+        return units[scale];
+    }
+
+    function volumeValue(raw, unit) {
+        return {
+            raw: raw,
+            unit: unit.name,
+            liters: raw * unit.liters,
+            cubic_meters: raw * unit.liters / 1000
+        };
+    }
+
+    if (!bytes || bytes.length < 14) {
+        return {
+            errors: ["Payload too short"]
+        };
+    }
+
+    const version = bytes[0];
+
+    const extendedVersion = (version & 0x80)
+        ? bytes[1]
+        : null;
+
+    const payloadType = (version & 0x40)
+        ? "Alarm"
+        : "Normal";
+
+    const logType = (version & 0x03);
+
+    const deviceType = (version & 0x04)
+        ? "Unknown"
+        : "Apator Ultrimis";
+
+    const encrypted = (version & 0x20) !== 0;
+
+    const unit = getUnit(version);
+
+    if (!checkCRC(bytes)) {
+        return {
+            errors: ["CRC16 checksum error"],
+            data: {
+                version: version,
+                payload_length: bytes.length
+            }
+        };
+    }
+
+    if (deviceType === "Unknown") {
+        return {
+            errors: ["Unsupported device type"],
+            data: {
+                version: version
+            }
+        };
+    }
+
+    if (encrypted) {
+        return {
+            errors: ["Encrypted payload: decryption not implemented"],
+            data: {
+                version: version,
+                encrypted: true
+            }
+        };
+    }
+
+    const offset = extendedVersion !== null ? 2 : 1;
+    const expectedLength = payloadType === "Alarm"
+        ? 14
+        : (logType === 0 ? 48 : 22);
+
+    if (bytes.length !== expectedLength + (extendedVersion !== null ? 1 : 0)) {
+        return {
+            errors: ["Unexpected payload length"],
+            data: {
+                expected_length: expectedLength + (extendedVersion !== null ? 1 : 0),
+                actual_length: bytes.length
+            }
+        };
+    }
+
+    const timestamp = readUInt32LE(bytes, offset);
+    const meterIdBytes = bytes.slice(offset + 4, offset + 8);
+
+    const meterId = meterIdBytes
+        .slice()
+        .reverse()
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("")
+        .toUpperCase();
+
+    const flagsOffset = offset + 8;
+
+    const flagsCurrentMonth = readFlags(bytes[flagsOffset]);
+    const flagsCurrentDay = readFlags(bytes[flagsOffset + 1]);
+    const flagsCurrent = readFlags(bytes[flagsOffset + 2]);
+
+    const data = {
+        device: "Apator Ultrimis",
+        version: version,
+        extended_version: extendedVersion,
+        encrypted: false,
+        payload_type: payloadType,
+        meter_id: meterId,
+        timestamp: readTimestamp(timestamp),
+        unit: unit.name,
+        flags: {
+            current: flagsCurrent,
+            current_day: flagsCurrentDay,
+            current_month: flagsCurrentMonth
+        }
+    };
+
+    // Alarm telegram
+    if (payloadType === "Alarm") {
+        if (bytes.length !== 14 + (extendedVersion !== null ? 1 : 0)) {
+            return { errors: ["Invalid alarm payload length"] };
+        }
+
+        return { data: data };
+    }
+
+    // 14-hour history
+    if (logType === 0) {
+        const reverseRaw = readInt32LE(bytes, offset + 12);
+        const firstVolumeOffset = offset + 19;
+
+        let currentVolume = readInt32LE(bytes, firstVolumeOffset);
+
+        const readings = [{
+            timestamp: readTimestamp(timestamp),
+            volume: volumeValue(currentVolume, unit)
+        }];
+
+        // 13 signed differences produce 14 hourly readings
+        for (let i = 0; i < 13; i++) {
+            const delta = readInt16LE(
+                bytes,
+                firstVolumeOffset + 4 + i * 2
+            );
+
+            currentVolume -= delta;
+
+            readings.push({
+                timestamp: readTimestamp(timestamp - (i + 1) * 3600),
+                volume: volumeValue(currentVolume, unit)
+            });
+        }
+
+        data.log_type = "14_hourly";
+        data.reverse_volume = volumeValue(reverseRaw, unit);
+        data.readings = readings;
+
+        return { data: data };
+    }
+
+    // Daily or monthly telegram
+    const reverseRaw = readInt32LE(bytes, offset + 8);
+    const volumeRaw = readInt32LE(bytes, offset + 15);
+
+    if (logType === 1) {
+        data.log_type = "daily";
+        data.daily_reverse_volume = volumeValue(reverseRaw, unit);
+        data.daily_volume = volumeValue(volumeRaw, unit);
+    } else if (logType === 2) {
+        data.log_type = "monthly";
+        data.monthly_reverse_volume = volumeValue(reverseRaw, unit);
+        data.monthly_volume = volumeValue(volumeRaw, unit);
+    } else {
+        return {
+            errors: ["Unsupported log type"],
+            data: data
+        };
+    }
+
+    return { data: data };
+}
